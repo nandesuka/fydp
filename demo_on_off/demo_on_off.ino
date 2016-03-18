@@ -27,11 +27,11 @@
   Hardware setup: This library supports communicating with the
   LSM9DS1 over either I2C or SPI. This example demonstrates how
   to use I2C. The pin-out is as follows:
-	LSM9DS1 --------- Arduino
-	 SCL ---------- SCL (A5 on older 'Duinos')
-	 SDA ---------- SDA (A4 on older 'Duinos')
-	 VDD ------------- 3.3V
-	 GND ------------- GND
+  LSM9DS1 --------- Arduino
+   SCL ---------- SCL (A5 on older 'Duinos')
+   SDA ---------- SDA (A4 on older 'Duinos')
+   VDD ------------- 3.3V
+   GND ------------- GND
   (CSG, CSXM, SDOG, and SDOXM should all be pulled high.
   Jumpers on the breakout board will do this for you.)
 
@@ -41,9 +41,9 @@
   directly to the Arduino.
 
   Development environment specifics:
-	IDE: Arduino 1.6.3
-	Hardware Platform: SparkFun Redboard
-	LSM9DS1 Breakout Version: 1.0
+  IDE: Arduino 1.6.3
+  Hardware Platform: SparkFun Redboard
+  LSM9DS1 Breakout Version: 1.0
 
   This code is beerware. If you see me (or any other SparkFun
   employee) at the local, and you've found our code helpful,
@@ -79,57 +79,69 @@ float ax1, ay1, az1, gx1, gy1, gz1, mx1, my1, mz1;
 float ax2, ay2, az2, gx2, gy2, gz2, mx2, my2, mz2;
 float ax3, ay3, az3, gx3, gy3, gz3;
 
-bool actuator_left = false;
-bool actuator_right = false;
+float acc1x_avg = 0;
+float acc1y_avg = 0;
+float acc1z_avg = 0;
+float acc2x_avg = 0;
+float acc2y_avg  = 0;
+float acc2z_avg  = 0;
+
+int stateLeft = 0;
+int stateRight = 0;
+int stateOff = 0;
+
+int state = 0;
+int prev_state = 0;
 
 uint32_t curr_time = 0;
 uint32_t prev_time = 0;
+uint32_t prev_control = 0;
+uint32_t lastTurnOn = 0;
 
 ///////////////////////
 // Example I2C Setup //
 ///////////////////////
 // SDO_XM and SDO_G are both pulled high, so our addresses are:
-#define LSM9DS1_M_1	0x1E // Would be 0x1C if SDO_M is LOW
-#define LSM9DS1_AG_1	0x6B // Would be 0x6A if SDO_AG is LOW
+#define LSM9DS1_M_1 0x1E // Would be 0x1C if SDO_M is LOW
+#define LSM9DS1_AG_1  0x6B // Would be 0x6A if SDO_AG is LOW
 
 #define LSM9DS1_M_2  0x1C // Would be 0x1C if SDO_M is LOW
 #define LSM9DS1_AG_2  0x6A // Would be 0x6A if SDO_AG is LOW
 
 #define LED_PIN 13
 #define PUMP_L 22
-#define PUMP_R 24
-#define VALVE_L 26
+#define PUMP_R 26
+#define VALVE_L 24
 #define VALVE_R 28
 
 #define ACC_FSR (8192*2)
 #define GYR_FSR (131*2)
-#define sigFig 7
-
-////////////////////////
-// GLOBAL QUATERNION //
-///////////////////////
-float deltat = 0.0f, sum = 0.0f;          // integration interval for both filter schemes
-float GyroMeasError = PI * (40.0f / 180.0f);   // gyroscope measurement error in rads/s (start at 40 deg/s)
-float beta = sqrt(3.0f / 4.0f) * GyroMeasError;   // compute beta
-
-uint32_t lastUpdate = 0, firstUpdate = 0; // used to calculate integration interval
-uint32_t Now = 0;                         // used to calculate integration interval
-
-float Q1[4] = {1.0f, 0.0f, 0.0f, 0.0f};
-float Q2[4] = {1.0f, 0.0f, 0.0f, 0.0f};
-float Q3[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+#define sigFig 8
 
 ////////////////////////////
 // Sketch Output Settings //
 ////////////////////////////
 #define IMU1_ENABLE
 #define IMU2_ENABLE
-#define IMU3_ENABLE
-#define PRINT_SPEED 50 // 50 ms between prints
-#define PRINT_DATA
+//#define IMU3_ENABLE
+#define PRINT_SPEED 100 // 50 ms between prints
+#define CONTRL_SPEED 200 // 50 ms between prints
+//#define PRINT_DATA
+#define CONTROL_DEBUGG
+//#define CONTROL_DEBUG
 
 void setup()
 {
+  // disable all actuators
+  pinMode(PUMP_L, OUTPUT);
+  pinMode(PUMP_R, OUTPUT);
+  pinMode(VALVE_L, OUTPUT);
+  pinMode(VALVE_R, OUTPUT);
+  digitalWrite(PUMP_L, false);
+  digitalWrite(VALVE_L, false);
+  digitalWrite(PUMP_R, false);
+  digitalWrite(VALVE_R, false);
+
   // join I2C bus (I2Cdev library doesn't do this automatically)
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
   Wire.begin();
@@ -144,7 +156,7 @@ void setup()
   imu2.settings.device.commInterface = IMU_MODE_I2C;
   imu2.settings.device.mAddress = LSM9DS1_M_2;
   imu2.settings.device.agAddress = LSM9DS1_AG_2;
- 
+
   bool badInit = false;
 
 #ifdef IMU1_ENABLE
@@ -153,7 +165,10 @@ void setup()
     Serial.println("Failed to communicate with LSM9DS1.IMU1.");
     badInit = true;
   } else {
-    Serial.println("Successfully communicated with LSM9DS1.INU1");
+    imu1.calibrate(false, 1);
+    //Serial.print(imu1.aBiasRaw[0]);Serial.print(", ");Serial.print(imu1.aBiasRaw[1]);Serial.print(", ");Serial.println(imu1.aBiasRaw[2]);
+    //Serial.print(imu1.gBiasRaw[0]);Serial.print(", ");Serial.print(imu1.gBiasRaw[1]);Serial.print(", ");Serial.println(imu1.gBiasRaw[2]);
+    //Serial.println("Successfully communicated with LSM9DS1.INU1");
   }
 #endif
 #ifdef IMU2_ENABLE
@@ -162,7 +177,10 @@ void setup()
     Serial.println("Failed to communicate with LSM9DS1.IMU2");
     badInit = true;
   } else {
-    Serial.println("Successfully communicated with LSM9DS1.IMU2");
+    imu2.calibrate(false, 2);
+    //Serial.print(imu2.aBiasRaw[0]);Serial.print(", ");Serial.print(imu2.aBiasRaw[1]);Serial.print(", ");Serial.println(imu2.aBiasRaw[2]);
+    //Serial.print(imu2.gBiasRaw[0]);Serial.print(", ");Serial.print(imu2.gBiasRaw[1]);Serial.print(", ");Serial.println(imu2.gBiasRaw[2]);
+    //Serial.println("Successfully communicated with LSM9DS1.IMU2");
   }
 #endif
 #ifdef IMU3_ENABLE
@@ -172,75 +190,88 @@ void setup()
     Serial.println("Failed to communicate with MPU9050.IMU3");
     badInit = true;
   } else {
-    Serial.println("Successfully communicated with MPU9050.IMU3");
+    //Serial.println("Successfully communicated with MPU9050.IMU3");
   }
 #endif
-
-  // disable all actuators
-  pinMode(PUMP_L, OUTPUT);
-  pinMode(PUMP_R, OUTPUT);
-  pinMode(VALVE_L, OUTPUT);
-  pinMode(VALVE_R, OUTPUT);
-  digitalWrite(PUMP_L, actuator_left);
-  digitalWrite(VALVE_L, actuator_left);
-  digitalWrite(PUMP_R, actuator_right);
-  digitalWrite(VALVE_R, actuator_right);
-
   if (badInit) {
     while (1) ;
   }
   prev_time = millis();
 }
 
+
+
+void off() {
+  digitalWrite(VALVE_L, false);
+  digitalWrite(PUMP_L, false);
+  digitalWrite(VALVE_R, false);
+  digitalWrite(PUMP_R, false);
+}
+
+void turnOnLeft() {
+  off();
+  delay(100);
+  digitalWrite(VALVE_L, true);
+  digitalWrite(PUMP_L, true);
+  digitalWrite(VALVE_R, false);
+  digitalWrite(PUMP_R, false);
+  delay(400);
+  off();
+}
+
+void turnOnRight() {
+  off();
+  delay(100);
+  digitalWrite(VALVE_L, false);
+  digitalWrite(PUMP_L, false);
+  digitalWrite(VALVE_R, true);
+  digitalWrite(PUMP_R, true);
+  delay(400);
+  off();
+}
+
+void turnOff () {
+  digitalWrite(VALVE_L, false);
+  digitalWrite(PUMP_L, false);
+  digitalWrite(VALVE_R, false);
+  digitalWrite(PUMP_R, false);
+  delay(400);
+}
+
+void turnOnBoth () {
+  off();
+  delay(100);
+  digitalWrite(VALVE_L, true);
+  digitalWrite(PUMP_L, true);
+  digitalWrite(VALVE_R, true);
+  digitalWrite(PUMP_R, true);
+  delay(400);
+  off();
+}
+
 void loop()
 {
-  curr_time = millis();
-  if (curr_time - prev_time >= PRINT_SPEED) {
+  turnOnRight();
+  turnOnRight();
+  turnOnLeft();
 
-#ifdef IMU1_ENABLE
-    imu1.getMotion9(&ax1, &ay1, &az1, &gx1, &gy1, &gz1, &mx1, &my1, &mz1);
-#endif
+  delay(200);
+  
+  turnOnLeft();
+  turnOnLeft();
+  turnOnRight();
 
-#ifdef IMU2_ENABLE
-    imu2.getMotion9(&ax2, &ay2, &az2, &gx2, &gy2, &gz2, &mx2, &my2, &mz2);
-#endif
-
-#ifdef IMU3_ENABLE
-    imu3.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-    ax3 = ax / ACC_FSR; ay3 = ay / ACC_FSR; az3 = az / ACC_FSR;
-    gx3 = gx / GYR_FSR; gy3 = gy / GYR_FSR; gz3 = gz / GYR_FSR;
-#endif
-
-#ifdef PRINT_DATA
-  Serial.print(curr_time); Serial.print(", ");
-  Serial.print(ax1,sigFig); Serial.print(", "); Serial.print(ay1,sigFig); Serial.print(", "); Serial.print(az1,sigFig); Serial.print(", ");
-  Serial.print(gx1,sigFig); Serial.print(", "); Serial.print(gy1,sigFig); Serial.print(", "); Serial.print(gz1,sigFig); Serial.print(", ");
-  Serial.print(mx1,sigFig); Serial.print(", "); Serial.print(my1,sigFig); Serial.print(", "); Serial.print(mz1,sigFig); Serial.print(", ");
-
-  Serial.print(ax2,sigFig); Serial.print(", "); Serial.print(ay2,sigFig); Serial.print(", "); Serial.print(az2,sigFig); Serial.print(", ");
-  Serial.print(gx2,sigFig); Serial.print(", "); Serial.print(gy2,sigFig); Serial.print(", "); Serial.print(gz2,sigFig); Serial.print(", ");
-  Serial.print(mx2,sigFig); Serial.print(", "); Serial.print(my2,sigFig); Serial.print(", "); Serial.print(mz2,sigFig); Serial.print(", ");
-
-  Serial.print(ax3,sigFig); Serial.print(", "); Serial.print(ay3,sigFig); Serial.print(", "); Serial.print(az3,sigFig); Serial.print(", ");
-  Serial.print(gx3,sigFig); Serial.print(", "); Serial.print(gy3,sigFig); Serial.print(", "); Serial.print(gz3,sigFig); Serial.println("");
-#endif
-    if (az3 >= 0) {
-      actuator_left = true;
-    } else {
-      actuator_left = false;
-    }
-    if (az2 >= 0) {
-      actuator_right = true;
-    } else {
-      actuator_right = false;
-    }
-    digitalWrite(PUMP_L, actuator_left);
-    digitalWrite(VALVE_L, actuator_left);
-    digitalWrite(PUMP_R, actuator_right);
-    digitalWrite(VALVE_R, actuator_right);
-    
-    prev_time = curr_time;
-  }
+  delay(200);
+  
+  turnOnRight();
+  turnOnLeft();
+  turnOnRight();
+  turnOnLeft();
+  turnOnRight();
+  turnOnLeft();
+  
+  turnOnBoth();
+  turnOff();
 }
 
 

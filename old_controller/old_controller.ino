@@ -27,11 +27,11 @@
   Hardware setup: This library supports communicating with the
   LSM9DS1 over either I2C or SPI. This example demonstrates how
   to use I2C. The pin-out is as follows:
-	LSM9DS1 --------- Arduino
-	 SCL ---------- SCL (A5 on older 'Duinos')
-	 SDA ---------- SDA (A4 on older 'Duinos')
-	 VDD ------------- 3.3V
-	 GND ------------- GND
+  LSM9DS1 --------- Arduino
+   SCL ---------- SCL (A5 on older 'Duinos')
+   SDA ---------- SDA (A4 on older 'Duinos')
+   VDD ------------- 3.3V
+   GND ------------- GND
   (CSG, CSXM, SDOG, and SDOXM should all be pulled high.
   Jumpers on the breakout board will do this for you.)
 
@@ -41,9 +41,9 @@
   directly to the Arduino.
 
   Development environment specifics:
-	IDE: Arduino 1.6.3
-	Hardware Platform: SparkFun Redboard
-	LSM9DS1 Breakout Version: 1.0
+  IDE: Arduino 1.6.3
+  Hardware Platform: SparkFun Redboard
+  LSM9DS1 Breakout Version: 1.0
 
   This code is beerware. If you see me (or any other SparkFun
   employee) at the local, and you've found our code helpful,
@@ -102,8 +102,8 @@ uint32_t lastTurnOn = 0;
 // Example I2C Setup //
 ///////////////////////
 // SDO_XM and SDO_G are both pulled high, so our addresses are:
-#define LSM9DS1_M_1	0x1E // Would be 0x1C if SDO_M is LOW
-#define LSM9DS1_AG_1	0x6B // Would be 0x6A if SDO_AG is LOW
+#define LSM9DS1_M_1 0x1E // Would be 0x1C if SDO_M is LOW
+#define LSM9DS1_AG_1  0x6B // Would be 0x6A if SDO_AG is LOW
 
 #define LSM9DS1_M_2  0x1C // Would be 0x1C if SDO_M is LOW
 #define LSM9DS1_AG_2  0x6A // Would be 0x6A if SDO_AG is LOW
@@ -289,12 +289,10 @@ void loop()
       acc1z_avg = az2;
     } else {
       
-        acc2x_avg = (2*acc2x_avg + ax1) / 3;
-        acc2y_avg = (2*acc2y_avg + ay1) / 3;
-        acc2z_avg = (2*acc2z_avg + az1) / 3;
-        acc1x_avg = (2*acc1x_avg + ax2) / 3;
-        acc1y_avg = (2*acc1y_avg + ay2) / 3;
-        acc1z_avg = (2*acc1z_avg + ay2) / 3;
+        acc2x_avg = (acc2x_avg + ax1) / 2;
+        acc2y_avg = (acc2y_avg + ay1) / 2;
+        acc1x_avg = (acc1x_avg + ax2) / 2;
+        acc1y_avg = (acc1y_avg + ay2) / 2;
       
       /*
       acc2x_avg = ax1;
@@ -327,108 +325,6 @@ void loop()
             //state = -1;
           }
         }
-      }
-    } else {
-      stateLeft++;
-      //state = -1;
-    }
-
-    if (acc2x_avg < 2.40489) {
-      if (acc2x_avg < 0.0670028) {
-        stateRight++;
-        //state = 1;
-      } else {
-        if (acc2x_avg < 2.14721) {
-          stateOff++;
-          //state = 0;
-        } else {
-          if (acc2y_avg < 8.74662) {
-            stateOff++;
-            //state = 0;
-          } else {
-            stateLeft++;
-            //state = -1;
-          }
-        }
-      }
-    } else {
-      stateLeft++;
-      //state = -1;
-    }
-
-    if (acc2x_avg < 2.40652) {
-      if (acc2x_avg < -0.007723618) {
-        stateRight++;
-        //state = 1;
-      } else {
-        if (acc2x_avg < 2.14899) {
-          if (acc2x_avg < 0.427952) {
-            if (acc2z_avg < 0.15447) {
-              stateRight++;
-              //state = 1;
-            } else {
-              stateOff++;
-              //state = 0;
-            }
-          } else {
-            stateOff++;
-            //state = 0;
-          }
-        } else {
-          if (acc2z_avg < -3.42329) {
-            stateOff++;
-            //state = 0;
-          } else {
-            stateLeft++;
-            //state = -1;
-          }
-        }
-      }
-    } else {
-      stateLeft++;
-      //state = -1;
-    }
-
-    if (acc2x_avg < 2.40788) {
-      if (acc2x_avg < -0.0220793) {
-        stateRight++;
-        //state = 1;
-      } else {
-        if (acc2x_avg < 2.14882) {
-          if (acc2x_avg < 0.312323) {
-            if (acc1z_avg < 1.40289) {
-              stateOff++;
-              //state = 0;
-            } else {
-              stateRight++;
-              //state = 1;
-            }
-          } else {
-            stateOff++;
-            //state = 0;
-          }
-        } else {
-          if (acc2y_avg < 8.7841) {
-            stateOff++;
-            //state = 0;
-          } else {
-            stateLeft++;
-            //state = -1;
-          }
-        }
-      }
-    } else {
-      stateLeft++;
-      //state = -1;
-    }
-
-    if (acc2x_avg < 2.39913) {
-      if (acc2x_avg < 0.117619) {
-        stateRight++;
-        //state = 1;
-      } else {
-        stateOff++;
-        //state = 0;
       }
     } else {
       stateLeft++;
